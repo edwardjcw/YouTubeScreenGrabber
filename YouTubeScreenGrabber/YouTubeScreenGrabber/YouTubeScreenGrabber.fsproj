@@ -25,7 +25,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>bin\Debug\YouTubeScreenGrabber.XML</DocumentationFile>
     <Prefer32Bit>true</Prefer32Bit>
-    <StartArguments>-o https://youtu.be/xPRJlfkQZcY?t=59 C:\Users\edward-vite\Downloads\crazy.bmp</StartArguments>
+    <StartArguments>-o https://youtu.be/xPRJlfkQZcY?t=59 C:\Users\edward-vite\Downloads\crazy</StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>

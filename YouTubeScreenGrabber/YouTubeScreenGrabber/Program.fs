@@ -28,6 +28,7 @@ let main argv =
         |> Helper.BuildEmbedLink
         |> Helper.BuildImage
         |> Helper.SaveImage savePath
+        |> ignore
         printfn "save complete" 
         |> ignore
 //    | "-m" ->

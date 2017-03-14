@@ -12,7 +12,7 @@ open System
 type Video = {url:string; start:int; stop:int}
 
 type Link = 
-    {original:string; embeded:Video; image:Bitmap option}
+    {original:string; embeded:Video; images:Bitmap array option}
 
 type Helper() =
 
@@ -33,42 +33,44 @@ type Helper() =
             |> Path.Combine
             |> Path.GetFullPath
         let settings start stop path = @" --video-filter=scene --vout=dummy --no-audio --start-time=" + (start |> string) + @" --stop-time=" + (stop |> string) + @" --scene-format=png --scene-path=" + path
-        //let quit = " vlc://quit"
+        let quit = " vlc://quit"
 
+        Directory.CreateDirectory(tempDir) |> ignore
         use myProcess = new System.Diagnostics.Process()
         myProcess.StartInfo.UseShellExecute <- false
         myProcess.StartInfo.FileName <- vlc
-        myProcess.StartInfo.Arguments <- video.url + (settings video.start video.stop tempDir) //+ quit
+        myProcess.StartInfo.Arguments <- video.url + (settings video.start video.stop tempDir) + quit
         myProcess.StartInfo.CreateNoWindow <- true        
         let started = 
             try
                 myProcess.Start()
             with | ex ->
-                ex.Data.Add("url", video.url)
-                reraise()
-        if not started then 
-            failwith "Failed to start process %s" video.url
-            
-        printfn "Started %s with pid %i" myProcess.ProcessName myProcess.Id
-        myProcess.WaitForExit()
+                printfn "Problem with url %s" video.url
+                false
 
-        tempDir
-        |> Directory.GetFiles
-        |> Array.last
-        |> (fun x -> Some(new Bitmap(x)))
+        if not started then 
+            Option.None
+        else
+            printfn "Started %s with pid %i" myProcess.ProcessName myProcess.Id
+            myProcess.WaitForExit()
+
+            tempDir
+            |> Directory.GetFiles
+            |> Array.map (fun x -> new Bitmap(x)) 
+            |> Some
      
     static let emptyVideo = {url=String.Empty; start=0; stop=0}
         
     static member BuildLink uri = 
-        {original=uri; embeded=emptyVideo; image=None}
+        {original=uri; embeded=emptyVideo; images=None}
 
     static member BuildEmbedLink (link : Link) = 
         {link with embeded = extractNameAndTime link.original}
 
     static member BuildImage (link : Link) =
-        {link with image = transformToImage link.embeded}
+        {link with images = transformToImage link.embeded}
 
     static member SaveImage savePath (link : Link) =
-        match link.image with
-        | Some(i) -> i.Save(savePath)
-        | _ -> failwith "no image"
+        match link.images with
+        | Some(i) -> i |> Array.mapi (fun j x -> x.Save(savePath + (j |> string)))
+        | _ -> failwith "Problem with some or all images"
