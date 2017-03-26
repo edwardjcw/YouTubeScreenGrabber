@@ -6,56 +6,93 @@ open FSharp.Data
 open System.Xml
 open System.Xml.Linq
 open System.Windows.Forms
+open System.IO
+open System
+open UsefulTools
+
+type Video = {url:string; start:int; stop:int}
 
 type Link = 
-    {original:string; embeded:string; image:Bitmap option}
+    {original:string; embeded:Video; images:Bitmap array option}
 
 type Helper() =
 
     static let extractNameAndTime (uri : string) =
-        let slash = '\\'
+        let slash = '/'
         let times = [|"?t=";"?start="|]
         uri.Split([|slash|])
         |> Array.last
         |> (fun x -> x.Split(times, System.StringSplitOptions.None))
-        |> (fun x -> @"https://www.youtube.com/embed/" + x.[0] + "?start=" + (x |> Array.last))
+        |> (fun x -> (x.[0], x |> Array.last |> int))
+        |> (fun (u, s) -> {url = u; start = s; stop = s+10})
 
-    static let transformToImage (uri : string) =
-        let size = new Size(1920,1080)
-        let point = new Point(0,0)
+    static let random = Random(0)
 
-        let saveBuild (form : Form) (browser : WebBrowser) = async {
-            do! Async.Sleep(2000)
-            use tmpImg = new Bitmap(size.Width, size.Height)
-            use g = Graphics.FromImage(tmpImg)
-        
-            g.CopyFromScreen(browser.PointToScreen(point), point, size)
-            form.Close()
-            return tmpImg
-        }
+    static let randomSubsetBySize n (a : 'a array) = 
+        match a.Length with
+        | count when count <= n -> a
+        | count ->  
+            let randoms = 
+                Seq.initInfinite (fun _ -> random.Next(count))
+                |> Seq.distinct
+                |> Seq.take n
+                |> Seq.toArray
+            randoms 
+            |> Array.map (fun i -> a.[i]) 
 
-        use browser = new WebBrowser()
-        use form = new Form()
-        form.Size<-size
-        browser.Size<-size
-        browser.Navigate(@"https://www.youtube.com/embed/TPLo-lnpUjY?start=303&autoplay=1")
-        browser.Location<-point
-        form.Controls.Add(browser)
-        form.Show()
+    static let transformToImage (video : Video) =
+ 
+        let vlc = @"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"
+        let tempDir = 
+            (Path.GetTempPath(), Guid.NewGuid().ToString())
+            |> Path.Combine
+            |> Path.GetFullPath
+        let settings start stop path = @" --video-filter=scene --vout=dummy --no-audio --start-time=" + (start |> string) + @" --stop-time=" + (stop |> string) + @" --scene-format=png --scene-path=" + path
+        let quit = " vlc://quit"
+        let fullUrl url = "https://youtu.be/" + url
 
-        let result = Async.RunSynchronously(saveBuild form browser)
-        Some(result)
+        Directory.CreateDirectory(tempDir) |> ignore
+        use myProcess = new System.Diagnostics.Process()
+        myProcess.StartInfo.UseShellExecute <- false
+        myProcess.StartInfo.FileName <- vlc
+        myProcess.StartInfo.Arguments <- (fullUrl video.url) + (settings video.start video.stop tempDir) + quit
+        myProcess.StartInfo.CreateNoWindow <- true        
+        let started = 
+            try
+                myProcess.Start()
+            with | ex ->
+                printfn "Problem with url %s" video.url
+                false
+
+        if not started then 
+            Option.None
+        else
+            printfn "Started %s with pid %i" myProcess.ProcessName myProcess.Id
+            myProcess.WaitForExit()
+
+            let randFiles = 
+                tempDir 
+                |> Directory.GetFiles
+                |> randomSubsetBySize 5
+            //|> Array.map (fun x->printfn "%A" x; x)
+            randFiles
+            |> Array.map (fun x -> new Bitmap(x)) 
+            |> Some
+     
+    static let emptyVideo = {url=String.Empty; start=0; stop=0}
         
     static member BuildLink uri = 
-        {original=uri; embeded=""; image=None}
+        {original=uri; embeded=emptyVideo; images=None}
 
     static member BuildEmbedLink (link : Link) = 
         {link with embeded = extractNameAndTime link.original}
 
     static member BuildImage (link : Link) =
-        {link with image = transformToImage link.embeded}
+        {link with images = transformToImage link.embeded}
 
-    static member SaveImage savePath (link : Link) =
-        match link.image with
-        | Some(i) -> i.Save(savePath)
-        | _ -> failwith "no image"
+    static member SaveImage saveDir (link : Link) =
+        if saveDir |> Directory.Exists |> not then saveDir |> Directory.CreateDirectory |> ignore
+        let fullUrl = link.embeded.url + (link.embeded.start |> string) + "_"
+        match link.images with
+        | Some(i) -> i |> Array.mapi (fun j x -> x.Save(Path.Combine(saveDir, fullUrl + (j |> string) + ".png")))
+        | _ -> [|()|] //failwith "Problem with some or all images"

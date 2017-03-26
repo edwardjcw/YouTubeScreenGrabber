@@ -2,9 +2,15 @@
 // See the 'F# Tutorial' project for more help.
 
 open Helper
+open System.IO
 
 [<EntryPoint>]
 let main argv = 
+
+    let extractLinks text =
+        match text |> File.Exists with
+        | true -> text |> File.ReadAllLines
+        | false -> Array.empty
 
     match argv.[0].ToLower() with
     | "-h" -> //show help
@@ -28,17 +34,18 @@ let main argv =
         |> Helper.BuildEmbedLink
         |> Helper.BuildImage
         |> Helper.SaveImage savePath
+        |> ignore
         printfn "save complete" 
         |> ignore
-//    | "-m" ->
-//        let links = extractLinks argv.[1]
-//        let savePath = argv.[2]
-//        links
-//        |> List.map buildEmbedLink
-//        |> List.map buildImage
-//        |> saveMultipleImages savePath
-//        |> printfn "save multiple images done"
-//        |> ignore 
+    | "-m" ->
+        let links = extractLinks argv.[1]
+        let savePath = argv.[2]
+        links
+        |> Array.Parallel.map (Helper.BuildLink >> Helper.BuildEmbedLink >> Helper.BuildImage >>
+            (fun i -> i |> Helper.SaveImage savePath |> ignore))
+        |> ignore
+        printfn "save multiple images done"
+        |> ignore 
     | _ -> printfn "unknown args" |> ignore
 
     0 // return an integer exit code
